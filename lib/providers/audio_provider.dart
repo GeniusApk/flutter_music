@@ -1,88 +1,140 @@
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
-import 'package:palette_generator/palette_generator.dart';
-import 'package:audio_session/audio_session.dart';
+import 'package:flutter_music/providers/music_provider.dart';
 
 class AudioProvider extends ChangeNotifier {
-  final AudioPlayer _audioPlayer = AudioPlayer();
-  PaletteGenerator? _currentPalette;
-  Duration _position = Duration.zero;
-  Duration _duration = Duration.zero;
+  final AudioPlayer audioPlayer = AudioPlayer();
+  final MusicProvider musicProvider;
+
+  MediaItem? _currentSong;
   bool _isPlaying = false;
+  double _progress = 0.0;
 
-  AudioPlayer get audioPlayer => _audioPlayer;
-  PaletteGenerator? get currentPalette => _currentPalette;
-  Duration get position => _position;
-  Duration get duration => _duration;
-  bool get isPlaying => _isPlaying;
-
-  AudioProvider() {
-    _initAudioPlayer();
+  AudioProvider(this.musicProvider) {
+    _init();
   }
 
-  Future<void> _initAudioPlayer() async {
-    // Configure audio session
-    final session = await AudioSession.instance;
-    await session.configure(const AudioSessionConfiguration.music());
-
-    // Listen to player state changes
-    _audioPlayer.playerStateStream.listen((state) {
-      _isPlaying = state.playing;
-      notifyListeners();
-    });
-
-    // Listen to position changes
-    _audioPlayer.positionStream.listen((pos) {
-      _position = pos;
-      notifyListeners();
-    });
-
-    // Listen to duration changes
-    _audioPlayer.durationStream.listen((dur) {
-      _duration = dur ?? Duration.zero;
-      notifyListeners();
-    });
-
-    // Handle errors
-    _audioPlayer.processingStateStream.listen((state) {
-      if (state == ProcessingState.completed) {
-        _audioPlayer.seek(Duration.zero);
-        _audioPlayer.pause();
-      }
-    });
-  }
-
-  Future<void> setAudioSource(String url, String title, String artist, String artUrl) async {
+  Future<void> _init() async {
     try {
-      await _audioPlayer.setAudioSource(
-        AudioSource.uri(
-          Uri.parse(url),
-          tag: MediaItem(
-            id: url,
-            title: title,
-            artist: artist,
-            artUri: Uri.parse(artUrl),
-          ),
-        ),
-      );
+      // Initialize audio session
+      await audioPlayer.setLoopMode(LoopMode.off);
+
+      // Listen to player state changes
+      audioPlayer.playerStateStream.listen((state) {
+        _isPlaying = state.playing;
+        notifyListeners();
+      });
+
+      // Listen to position changes
+      audioPlayer.positionStream.listen((position) {
+        final duration = audioPlayer.duration;
+        if (duration != null) {
+          _progress = position.inMilliseconds / duration.inMilliseconds;
+          notifyListeners();
+        }
+      });
+
+      // Handle sequence state changes
+      audioPlayer.sequenceStateStream.listen((sequenceState) {
+        if (sequenceState?.currentSource != null) {
+          _currentSong = sequenceState!.currentSource!.tag as MediaItem;
+          notifyListeners();
+        }
+      });
     } catch (e) {
-      debugPrint("Error setting audio source: $e");
+      debugPrint('Error initializing audio player: $e');
     }
   }
 
-  Future<void> updatePalette(ImageProvider imageProvider) async {
+  // Getters
+  MediaItem? get currentSong => _currentSong;
+  bool get isPlaying => _isPlaying;
+  double get progress => _progress;
+
+  // Play a specific song
+  Future<void> playSong(MediaItem song) async {
     try {
-      _currentPalette = await PaletteGenerator.fromImageProvider(imageProvider);
+      if (song.extras?['url'] == null || song.extras!['url'].isEmpty) {
+        throw Exception('Song URL is invalid');
+      }
+
+      await audioPlayer.stop();
+      final Uri audioUri = Uri.parse(song.extras!['url']);
+
+      await audioPlayer.setAudioSource(
+        AudioSource.uri(
+          audioUri,
+          tag: song,
+        ),
+        preload: true,
+      );
+
+      await audioPlayer.play();
+      _currentSong = song;
+      _isPlaying = true;
       notifyListeners();
     } catch (e) {
-      debugPrint("Error generating palette: $e");
+      debugPrint('Error playing song: $e');
+      _isPlaying = false;
+      notifyListeners();
+    }
+  }
+
+  // Playback controls
+  Future<void> play() async {
+    if (audioPlayer.processingState == ProcessingState.ready) {
+      await audioPlayer.play();
+      _isPlaying = true;
+      notifyListeners();
+    }
+  }
+
+  Future<void> pause() async {
+    await audioPlayer.pause();
+    _isPlaying = false;
+    notifyListeners();
+  }
+
+  Future<void> next() async {
+    try {
+      final songs = musicProvider.songs;
+      if (songs.isEmpty || _currentSong == null) return;
+
+      final currentIndex = songs.indexWhere((s) => s.id == _currentSong?.id);
+      if (currentIndex == -1) return;
+
+      final nextIndex = (currentIndex + 1) % songs.length;
+      await playSong(songs[nextIndex]);
+    } catch (e) {
+      debugPrint('Error playing next song: $e');
+    }
+  }
+
+  Future<void> previous() async {
+    try {
+      final songs = musicProvider.songs;
+      if (songs.isEmpty || _currentSong == null) return;
+
+      final currentIndex = songs.indexWhere((s) => s.id == _currentSong?.id);
+      if (currentIndex == -1) return;
+
+      final previousIndex = (currentIndex - 1 + songs.length) % songs.length;
+      await playSong(songs[previousIndex]);
+    } catch (e) {
+      debugPrint('Error playing previous song: $e');
+    }
+  }
+
+  Future<void> seek(Duration position) async {
+    if (audioPlayer.processingState == ProcessingState.ready) {
+      await audioPlayer.seek(position);
     }
   }
 
   @override
   void dispose() {
-    _audioPlayer.dispose();
+    audioPlayer.dispose();
     super.dispose();
   }
 }

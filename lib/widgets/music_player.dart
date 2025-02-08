@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_music/providers/audio_provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class MusicPlayer extends StatelessWidget {
   const MusicPlayer({super.key});
@@ -10,71 +10,112 @@ class MusicPlayer extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<AudioProvider>(
       builder: (context, audioProvider, child) {
-        final palette = audioProvider.currentPalette;
-        final backgroundColor = palette?.dominantColor?.color ?? Colors.black;
-        final textColor = palette?.dominantColor?.bodyTextColor ?? Colors.white;
+        if (audioProvider.currentSong == null) {
+          return const SizedBox.shrink();
+        }
 
         return Container(
-          color: backgroundColor,
+          decoration: BoxDecoration(
+            color: Colors.grey[900],
+            border: Border(
+              top: BorderSide(
+                color: Colors.grey[800]!,
+                width: 0.5,
+              ),
+            ),
+          ),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // Album Art
-              if (audioProvider.audioPlayer.sequenceState?.currentSource?.tag?.artUri != null)
-                Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: CachedNetworkImage(
-                      imageUrl: audioProvider.audioPlayer.sequenceState!.currentSource!.tag.artUri.toString(),
-                      width: 200,
-                      height: 200,
-                      fit: BoxFit.cover,
+              // Progress bar
+              LinearProgressIndicator(
+                value: audioProvider.progress,
+                backgroundColor: Colors.grey[800],
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  Theme.of(context).primaryColor,
+                ),
+                minHeight: 2,
+              ),
+
+              // Player controls
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                child: Row(
+                  children: [
+                    // Song thumbnail
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: CachedNetworkImage(
+                        imageUrl:
+                            audioProvider.currentSong?.artUri?.toString() ?? '',
+                        width: 48,
+                        height: 48,
+                        fit: BoxFit.cover,
+                        errorWidget: (context, url, error) => Container(
+                          color: Colors.grey[800],
+                          child: const Icon(Icons.music_note),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
+                    const SizedBox(width: 12),
 
-              // Title and Artist
-              Text(
-                audioProvider.audioPlayer.sequenceState?.currentSource?.tag?.title ?? 'No Track Selected',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: textColor,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                audioProvider.audioPlayer.sequenceState?.currentSource?.tag?.artist ?? 'Unknown Artist',
-                style: TextStyle(
-                  fontSize: 18,
-                  color: textColor.withOpacity(0.7),
-                ),
-              ),
+                    // Song info
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            audioProvider.currentSong?.title ?? 'Unknown',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            audioProvider.currentSong?.artist ??
+                                'Unknown Artist',
+                            style: TextStyle(
+                              color: Colors.grey[400],
+                              fontSize: 12,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
 
-              // Progress Bar
-              Slider(
-                value: audioProvider.position.inSeconds.toDouble(),
-                max: audioProvider.duration.inSeconds.toDouble(),
-                onChanged: (value) {
-                  audioProvider.audioPlayer.seek(Duration(seconds: value.toInt()));
-                },
-              ),
-
-              // Play/Pause Button
-              IconButton(
-                icon: Icon(
-                  audioProvider.isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
-                  size: 64,
-                  color: textColor,
+                    // Controls
+                    IconButton(
+                      icon: const Icon(Icons.skip_previous),
+                      onPressed: audioProvider.previous,
+                      color: Colors.white,
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        audioProvider.isPlaying
+                            ? Icons.pause
+                            : Icons.play_arrow,
+                      ),
+                      onPressed: () {
+                        if (audioProvider.isPlaying) {
+                          audioProvider.pause();
+                        } else {
+                          audioProvider.play();
+                        }
+                      },
+                      color: Colors.white,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.skip_next),
+                      onPressed: audioProvider.next,
+                      color: Colors.white,
+                    ),
+                  ],
                 ),
-                onPressed: () {
-                  if (audioProvider.isPlaying) {
-                    audioProvider.audioPlayer.pause();
-                  } else {
-                    audioProvider.audioPlayer.play();
-                  }
-                },
               ),
             ],
           ),

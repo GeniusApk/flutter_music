@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:just_audio_background/just_audio_background.dart';
 import 'package:provider/provider.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 import 'package:flutter_music/screens/home_screen.dart';
-import 'package:flutter_music/providers/audio_provider.dart';
 import 'package:flutter_music/providers/music_provider.dart';
+import 'package:flutter_music/providers/audio_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -13,7 +13,7 @@ Future<void> main() async {
     androidNotificationChannelName: 'Audio playback',
     androidNotificationOngoing: true,
   );
-  
+
   runApp(const MyApp());
 }
 
@@ -24,15 +24,18 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (context) => AudioProvider()),
-        ChangeNotifierProvider(create: (context) => MusicProvider()),
+        ChangeNotifierProvider(create: (_) => MusicProvider()),
+        ChangeNotifierProxyProvider<MusicProvider, AudioProvider>(
+          create: (context) => AudioProvider(context.read<MusicProvider>()),
+          update: (context, musicProvider, previous) => AudioProvider(musicProvider),
+        ),
       ],
       child: MaterialApp(
         title: 'Flutter Music',
         theme: ThemeData(
           primarySwatch: Colors.blue,
-          useMaterial3: true,
           brightness: Brightness.dark,
+          useMaterial3: true,
         ),
         home: const HomeScreen(),
       ),
